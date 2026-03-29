@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:geocoding/geocoding.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'dart:async';
 
 class MainPage extends StatefulWidget {
   final String username;
@@ -13,32 +15,88 @@ class MainPage extends StatefulWidget {
 }
 
 class _MainPageState extends State<MainPage> {
-  final List<LatLng> points = [];
+  List<LatLng> points = [];
+  List<dynamic> searchResults = [];
 
   TextEditingController searchController = TextEditingController();
   MapController mapController = MapController();
+  Timer? _debounce;
+
+  // добавление точки
+  void addPoint(LatLng point) {
+    setState(() {
+      if (points.length < 4) {
+        points.add(point);
+      }
+    });
+  }
+
+  // поиск подсказок
+  Future<void> searchSuggestions(String query) async {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+
+    _debounce = Timer(const Duration(milliseconds: 500), () async {
+      if (query.isEmpty) {
+        setState(() => searchResults = []);
+        return;
+      }
+
+      try {
+        final url = Uri.parse(
+          'https://nominatim.openstreetmap.org/search?q=$query&format=json&limit=1',
+        );
+
+        final response = await http.get(
+          url,
+          headers: {'User-Agent': 'FlutterApp'},
+        );
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+
+          setState(() {
+            searchResults = data;
+          });
+        }
+      } catch (e) {
+        debugPrint("Ошибка поиска: $e");
+      }
+    });
+  }
 
   //Поиск по карте
   Future<void> searchLocation() async {
-    String query = searchController.text;
+    String query = searchController.text.trim();
 
     if (query.isEmpty) return;
 
-    List<Location> locations = await locationFromAddress(query);
+    try {
+      final url = Uri.parse(
+        'https://nominatim.openstreetmap.org/search?q=$query&format=json&limit=1',
+      );
 
-    if (locations.isNotEmpty) {
-      final loc = locations.first;
+      final response = await http.get(
+        url,
+        headers: {'User-Agent': 'FlutterApp'},
+      );
 
-      mapController.move(LatLng(loc.latitude, loc.longitude), 13);
-    }
-  }
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
 
-  void addPoint(LatLng pos) {
-    setState(() {
-      if (points.length < 4) {
-        points.add(pos);
+        if (data.isNotEmpty) {
+          final lat = double.parse(data[0]['lat']);
+          final lon = double.parse(data[0]['lon']);
+
+          mapController.move(LatLng(lat, lon), 13);
+        } else {
+          debugPrint("Ничего не найдено");
+        }
+      } else {
+        debugPrint("Ошибка HTTP: ${response.statusCode}");
       }
-    });
+    } catch (e) {
+      debugPrint("Ошибка: $e");
+    }
   }
 
   @override
@@ -59,6 +117,7 @@ class _MainPageState extends State<MainPage> {
                 Expanded(
                   child: TextField(
                     controller: searchController,
+                    onChanged: searchSuggestions,
                     decoration: const InputDecoration(
                       hintText: "Введите место (например Riga)",
                       border: OutlineInputBorder(),
@@ -72,6 +131,33 @@ class _MainPageState extends State<MainPage> {
               ],
             ),
           ),
+
+          if (searchResults.isNotEmpty)
+            Container(
+              height: 200,
+              color: Colors.white,
+              child: ListView.builder(
+                itemCount: searchResults.length,
+                itemBuilder: (context, index) {
+                  final item = searchResults[index];
+
+                  return ListTile(
+                    title: Text(item['display_name']),
+                    onTap: () {
+                      final lat = double.parse(item['lat']);
+                      final lon = double.parse(item['lon']);
+
+                      mapController.move(LatLng(lat, lon), 13);
+
+                      setState(() {
+                        searchResults = [];
+                        searchController.text = item['display_name'];
+                      });
+                    },
+                  );
+                },
+              ),
+            ),
 
           /// 🗺 Карта
           Expanded(
