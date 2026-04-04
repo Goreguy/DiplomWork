@@ -5,6 +5,9 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'dart:async';
 
+import 'SearchAndMapWidgets/search_bar.dart';
+import 'SearchAndMapWidgets/map_widget.dart';
+
 class MainPage extends StatefulWidget {
   final String username;
 
@@ -18,8 +21,8 @@ class _MainPageState extends State<MainPage> {
   List<LatLng> points = [];
   List<dynamic> searchResults = [];
 
-  TextEditingController searchController = TextEditingController();
-  MapController mapController = MapController();
+  final TextEditingController searchController = TextEditingController();
+  final MapController mapController = MapController();
   Timer? _debounce;
 
   // добавление точки
@@ -109,29 +112,14 @@ class _MainPageState extends State<MainPage> {
 
       body: Column(
         children: [
-          /// 🔍 Поиск
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: searchController,
-                    onChanged: searchSuggestions,
-                    decoration: const InputDecoration(
-                      hintText: "Введите место (например Riga)",
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.search),
-                  onPressed: searchLocation,
-                ),
-              ],
-            ),
+          //Виджет поиска
+          SearchBarWidget(
+            controller: searchController,
+            onChanged: searchSuggestions,
+            onSearch: searchLocation,
           ),
 
+          //Подсказки
           if (searchResults.isNotEmpty)
             Container(
               height: 200,
@@ -159,49 +147,46 @@ class _MainPageState extends State<MainPage> {
               ),
             ),
 
-          /// 🗺 Карта
-          Expanded(
-            child: Center(
-              child: Container(
-                width: 800,
-                height: 500,
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: FlutterMap(
-                    mapController: mapController,
-                    options: MapOptions(
-                      initialCenter: LatLng(56.95, 24.10),
-                      initialZoom: 10,
-                      onTap: (_, pos) => addPoint(pos),
-                    ),
-                    children: [
-                      TileLayer(
-                        urlTemplate:
-                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        userAgentPackageName: 'com.example.myapp',
-                      ),
-                      MarkerLayer(
-                        markers: points.map((p) {
-                          return Marker(
-                            point: p,
-                            width: 40,
-                            height: 40,
-                            child: const Icon(
-                              Icons.location_pin,
-                              color: Colors.red,
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ],
-                  ),
-                ),
+          //Карта
+          MapWidget(
+            mapController: mapController,
+            points: points,
+            onTap: addPoint,
+          ),
+
+          //Очистить полигоны
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    points.clear();
+                  });
+                },
+                child: const Text("Очистить"),
               ),
-            ),
+
+              const SizedBox(width: 20),
+
+              ElevatedButton(
+                onPressed: () {
+                  if (points.length < 4) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Выберите 4 точки")),
+                    );
+                    return;
+                  }
+
+                  /// реализовать отправку в пайтон
+                  debugPrint("Координаты полигона:");
+                  for (var p in points) {
+                    debugPrint("${p.latitude}, ${p.longitude}");
+                  }
+                },
+                child: const Text("Анализ"),
+              ),
+            ],
           ),
         ],
       ),
