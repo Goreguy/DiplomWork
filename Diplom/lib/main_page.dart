@@ -27,10 +27,27 @@ class _MainPageState extends State<MainPage> {
 
   // добавление точки
   void addPoint(LatLng point) {
-    setState(() {
-      if (points.length < 4) {
-        points.add(point);
+    /// максимум 4 точки
+    if (points.length >= 4) return;
+
+    /// проверка расстояния
+    if (points.isNotEmpty) {
+      final Distance distance = Distance();
+
+      double meters = distance(points.last, point);
+
+      /// максимум 1 км
+      if (meters > 1000) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Точка слишком далеко (максимум 1 км)")),
+        );
+
+        return;
       }
+    }
+
+    setState(() {
+      points.add(point);
     });
   }
 
@@ -38,27 +55,24 @@ class _MainPageState extends State<MainPage> {
   Future<void> searchSuggestions(String query) async {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
 
-    _debounce = Timer(const Duration(milliseconds: 500), () async {
-      if (query.isEmpty) {
+    _debounce = Timer(const Duration(milliseconds: 1500), () async {
+      if (query.isEmpty || query.length < 3) {
         setState(() => searchResults = []);
         return;
       }
 
       try {
-        final url = Uri.parse(
-          'https://nominatim.openstreetmap.org/search?q=$query&format=json&limit=1',
-        );
+        final url = Uri.parse('https://photon.komoot.io/api/?q=$query&limit=5');
 
-        final response = await http.get(
-          url,
-          headers: {'User-Agent': 'FlutterApp'},
-        );
+        final response = await http
+            .get(url, headers: {'User-Agent': 'FlutterApp'})
+            .timeout(const Duration(seconds: 5));
 
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
 
           setState(() {
-            searchResults = data;
+            searchResults = data['features'];
           });
         }
       } catch (e) {
@@ -74,9 +88,7 @@ class _MainPageState extends State<MainPage> {
     if (query.isEmpty) return;
 
     try {
-      final url = Uri.parse(
-        'https://nominatim.openstreetmap.org/search?q=$query&format=json&limit=1',
-      );
+      final url = Uri.parse('https://photon.komoot.io/api/?q=$query&limit=5');
 
       final response = await http.get(
         url,
@@ -86,9 +98,12 @@ class _MainPageState extends State<MainPage> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
 
-        if (data.isNotEmpty) {
-          final lat = double.parse(data[0]['lat']);
-          final lon = double.parse(data[0]['lon']);
+        final features = data['features'];
+
+        if (features.isNotEmpty) {
+          final lon = features[0]['geometry']['coordinates'][0];
+
+          final lat = features[0]['geometry']['coordinates'][1];
 
           mapController.move(LatLng(lat, lon), 13);
         } else {
@@ -130,16 +145,16 @@ class _MainPageState extends State<MainPage> {
                   final item = searchResults[index];
 
                   return ListTile(
-                    title: Text(item['display_name']),
+                    title: Text(item['properties']['name']),
                     onTap: () {
-                      final lat = double.parse(item['lat']);
-                      final lon = double.parse(item['lon']);
+                      final lat = item['geometry']['coordinates'][1];
+                      final lon = item['geometry']['coordinates'][0];
 
                       mapController.move(LatLng(lat, lon), 13);
 
                       setState(() {
                         searchResults = [];
-                        searchController.text = item['display_name'];
+                        searchController.text = item['properties']['name'];
                       });
                     },
                   );
@@ -170,20 +185,7 @@ class _MainPageState extends State<MainPage> {
               const SizedBox(width: 20),
 
               ElevatedButton(
-                onPressed: () {
-                  if (points.length < 4) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Выберите 4 точки")),
-                    );
-                    return;
-                  }
-
-                  /// реализовать отправку в пайтон
-                  debugPrint("Координаты полигона:");
-                  for (var p in points) {
-                    debugPrint("${p.latitude}, ${p.longitude}");
-                  }
-                },
+                onPressed: analyzePolygon,
                 child: const Text("Анализ"),
               ),
             ],
@@ -191,5 +193,42 @@ class _MainPageState extends State<MainPage> {
         ],
       ),
     );
+  }
+
+  // анализ полигона
+  Future<void> analyzePolygon() async {
+    if (points.length < 4) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Выберите 4 точки")));
+
+      return;
+    }
+
+    final url = Uri.parse('http://127.0.0.1:8000/analyze');
+
+    final body = {
+      "points": points.map((p) {
+        return {"lat": p.latitude, "lon": p.longitude};
+      }).toList(),
+    };
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(body),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        debugPrint(data.toString());
+      } else {
+        debugPrint("Ошибка сервера: ${response.statusCode}");
+      }
+    } catch (e) {
+      debugPrint("Ошибка: $e");
+    }
   }
 }
