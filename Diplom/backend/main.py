@@ -1,24 +1,16 @@
 from fastapi import FastAPI
 
+from models.polygon_model import PolygonRequest
+
+from services.ndvi_service import analyze_ndvi
+
+
 app = FastAPI()
 
 
-@app.get("/")
-def root():
-
-    return {
-        "message": "Backend works"
-    }
-
-
 @app.post("/analyze")
-def analyze(data: dict):
+async def analyze(data: PolygonRequest):
 
-    points = data["points"]
+    result = analyze_ndvi(data.points)
 
-    print(points)
-
-    return {
-        "status": "success",
-        "points_count": len(points)
-    }
+    return result

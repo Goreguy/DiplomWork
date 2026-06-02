@@ -18,6 +18,9 @@ class MainPage extends StatefulWidget {
 }
 
 class _MainPageState extends State<MainPage> {
+  double? meanNdvi;
+  String? vegetationStatus;
+
   List<LatLng> points = [];
   List<dynamic> searchResults = [];
 
@@ -190,6 +193,35 @@ class _MainPageState extends State<MainPage> {
               ),
             ],
           ),
+
+          if (meanNdvi != null && vegetationStatus != null)
+            Container(
+              margin: const EdgeInsets.all(16),
+
+              padding: const EdgeInsets.all(16),
+
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.green),
+              ),
+
+              child: Column(
+                children: [
+                  Text(
+                    "Средний NDVI: ${meanNdvi!.toStringAsFixed(3)}",
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  Text(vegetationStatus!, style: const TextStyle(fontSize: 18)),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -223,7 +255,11 @@ class _MainPageState extends State<MainPage> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
 
-        debugPrint(data.toString());
+        setState(() {
+          meanNdvi = data["mean_ndvi"];
+
+          vegetationStatus = data["status"];
+        });
       } else {
         debugPrint("Ошибка сервера: ${response.statusCode}");
       }
