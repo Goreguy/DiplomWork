@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'authentification_page.dart';
 
 void main() {
-  runApp( const MyApp());
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'main_page.dart';
+import 'pages/main_page.dart';
 
 class AuthPage extends StatefulWidget {
   const AuthPage({super.key});
@@ -19,9 +19,9 @@ class _AuthPageState extends State<AuthPage> {
     String password = passwordController.text.trim();
 
     if (login.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Заполните все поля")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Заполните все поля")));
       return;
     }
 
@@ -31,12 +31,9 @@ class _AuthPageState extends State<AuthPage> {
       print("Регистрация: $login / $password");
     }
     Navigator.pushReplacement(
-  context,
-  MaterialPageRoute(
-    builder: (_) => MainPage(username: login),
-    ),
+      context,
+      MaterialPageRoute(builder: (_) => MainPage(username: login)),
     );
-
 
     // здесь позже будет запрос к backend
   }
@@ -53,16 +50,12 @@ class _AuthPageState extends State<AuthPage> {
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
             boxShadow: const [
-              BoxShadow(
-                blurRadius: 10,
-                color: Color.fromARGB(31, 0, 0, 0),
-              )
+              BoxShadow(blurRadius: 10, color: Color.fromARGB(31, 0, 0, 0)),
             ],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-
               /// Заголовок
               Text(
                 isLogin ? "Вход" : "Регистрация",

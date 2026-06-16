@@ -1,12 +1,14 @@
+//главная рабочая страница
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'dart:async';
+import 'analysis_result_page.dart';
 
-import 'SearchAndMapWidgets/search_bar.dart';
-import 'SearchAndMapWidgets/map_widget.dart';
+import '../SearchAndMapWidgets/search_bar.dart';
+import '../SearchAndMapWidgets/map_widget.dart';
 
 class MainPage extends StatefulWidget {
   final String username;
@@ -18,8 +20,11 @@ class MainPage extends StatefulWidget {
 }
 
 class _MainPageState extends State<MainPage> {
+  String? heatmapUrl;
+  List<dynamic> ndviHistory = [];
   double? meanNdvi;
   String? vegetationStatus;
+  String? rgbUrl;
 
   List<LatLng> points = [];
   List<dynamic> searchResults = [];
@@ -27,6 +32,35 @@ class _MainPageState extends State<MainPage> {
   final TextEditingController searchController = TextEditingController();
   final MapController mapController = MapController();
   Timer? _debounce;
+
+  // получение истории
+  Future<void> loadHistory() async {
+    final url = Uri.parse('http://127.0.0.1:8000/history');
+
+    final body = {
+      "points": points.map((p) {
+        return {"lat": p.latitude, "lon": p.longitude};
+      }).toList(),
+    };
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(body),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        setState(() {
+          ndviHistory = data["history"];
+        });
+      }
+    } catch (e) {
+      debugPrint("Ошибка history: $e");
+    }
+  }
 
   // добавление точки
   void addPoint(LatLng point) {
@@ -39,10 +73,10 @@ class _MainPageState extends State<MainPage> {
 
       double meters = distance(points.last, point);
 
-      /// максимум 1 км
-      if (meters > 1000) {
+      /// максимум 3 км
+      if (meters > 3000) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Точка слишком далеко (максимум 1 км)")),
+          const SnackBar(content: Text("Точка слишком далеко (максимум 3 км)")),
         );
 
         return;
@@ -120,6 +154,59 @@ class _MainPageState extends State<MainPage> {
     }
   }
 
+  // загрузка heatmap
+  Future<void> loadHeatmap() async {
+    final url = Uri.parse('http://127.0.0.1:8000/heatmap');
+
+    final body = {
+      "points": points.map((p) {
+        return {"lat": p.latitude, "lon": p.longitude};
+      }).toList(),
+    };
+
+    final response = await http.post(
+      url,
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode(body),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+
+      heatmapUrl =
+          "${data["image_url"]}?t=${DateTime.now().millisecondsSinceEpoch}";
+    }
+  }
+
+  Future<void> loadRgb() async {
+    final url = Uri.parse('http://127.0.0.1:8000/rgb');
+
+    final body = {
+      "points": points.map((p) {
+        return {"lat": p.latitude, "lon": p.longitude};
+      }).toList(),
+    };
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(body),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        setState(() {
+          rgbUrl =
+              "${data["image_url"]}?t=${DateTime.now().millisecondsSinceEpoch}";
+        });
+      }
+    } catch (e) {
+      debugPrint("Ошибка загрузки RGB: $e");
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -193,35 +280,6 @@ class _MainPageState extends State<MainPage> {
               ),
             ],
           ),
-
-          if (meanNdvi != null && vegetationStatus != null)
-            Container(
-              margin: const EdgeInsets.all(16),
-
-              padding: const EdgeInsets.all(16),
-
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.green),
-              ),
-
-              child: Column(
-                children: [
-                  Text(
-                    "Средний NDVI: ${meanNdvi!.toStringAsFixed(3)}",
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  Text(vegetationStatus!, style: const TextStyle(fontSize: 18)),
-                ],
-              ),
-            ),
         ],
       ),
     );
@@ -229,6 +287,14 @@ class _MainPageState extends State<MainPage> {
 
   // анализ полигона
   Future<void> analyzePolygon() async {
+    setState(() {
+      meanNdvi = null;
+      vegetationStatus = null;
+      heatmapUrl = null;
+      rgbUrl = null;
+      ndviHistory.clear();
+    });
+
     if (points.length < 4) {
       ScaffoldMessenger.of(
         context,
@@ -257,9 +323,25 @@ class _MainPageState extends State<MainPage> {
 
         setState(() {
           meanNdvi = data["mean_ndvi"];
-
           vegetationStatus = data["status"];
         });
+
+        await loadHistory();
+        await loadHeatmap();
+        await loadRgb();
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AnalysisResultPage(
+              meanNdvi: meanNdvi!,
+              vegetationStatus: vegetationStatus!,
+              history: ndviHistory,
+              heatmapUrl: heatmapUrl,
+              rgbUrl: rgbUrl,
+            ),
+          ),
+        );
       } else {
         debugPrint("Ошибка сервера: ${response.statusCode}");
       }

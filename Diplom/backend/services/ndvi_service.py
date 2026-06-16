@@ -7,6 +7,7 @@ from sentinelhub import (
     BBox,
 )
 
+from datetime import datetime, timedelta
 from config import CLIENT_ID, CLIENT_SECRET
 
 import numpy as np
@@ -20,6 +21,29 @@ config.sh_client_secret = CLIENT_SECRET
 
 def analyze_ndvi(points):
 
+    end_date = datetime.now()
+
+    start_date = end_date - timedelta(days=7)
+
+    mean_ndvi = get_ndvi_for_period(
+        points,
+        start_date.strftime("%Y-%m-%d"),
+        end_date.strftime("%Y-%m-%d")
+    )
+
+    if mean_ndvi < 0.2:
+        status = "Плохое состояние"
+    elif mean_ndvi < 0.5:
+        status = "Среднее состояние"
+    else:
+        status = "Хорошее состояние"
+
+    return {
+        "mean_ndvi": mean_ndvi,
+        "status": status
+    }
+
+def get_ndvi_for_period(points, start_date, end_date):
     # bbox из полигона
 
     min_lon = min(p.lon for p in points)
@@ -37,32 +61,30 @@ def analyze_ndvi(points):
 
     request = SentinelHubRequest(
 
-        evalscript="""
-        //VERSION=3
+        evalscript = """
+//VERSION=3
 
         function setup() {
           return {
             input: ["B04", "B08"],
-            output: {
-              bands: 2,
-              sampleType: "FLOAT32"
-            }
+            output: { bands: 2 }
           };
         }
 
         function evaluatePixel(sample) {
           return [
-            sample.B04,
-            sample.B08
+            sample.B04, // Red
+            sample.B08  // NIR
           ];
         }
         """,
 
         input_data=[
-            SentinelHubRequest.input_data(
-                data_collection=DataCollection.SENTINEL2_L2A,
-            )
-        ],
+    SentinelHubRequest.input_data(
+        data_collection=DataCollection.SENTINEL2_L2A,
+        time_interval=(start_date, end_date)
+    )
+],
 
         responses=[
             SentinelHubRequest.output_response(
@@ -83,7 +105,14 @@ def analyze_ndvi(points):
     red = data[:, :, 0]
     nir = data[:, :, 1]
 
-    ndvi = (nir - red) / (nir + red + 1e-6)
+
+    denom = nir + red
+
+    ndvi = np.where(
+        denom == 0,
+        0,
+        (nir - red) / denom
+    )
 
     mean_ndvi = float(np.mean(ndvi))
 
@@ -98,7 +127,5 @@ def analyze_ndvi(points):
     else:
         status = "Хорошее состояние"
 
-    return {
-        "mean_ndvi": mean_ndvi,
-        "status": status,
-    }
+    return mean_ndvi
+
