@@ -3,14 +3,35 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, Optional
 
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from PIL import Image
 
 from ml.dataset import INDEX_INPUTS, TARGET_INDEX, SampleItem, discover_samples, load_input_tensor, load_target_tensor
 from ml.model import MultiScaleNDVICNN
 from ml.train import r2_score_torch
 
+
+
+
+def _save_cnn_ndvi_heatmap(pred_ndvi: np.ndarray, output_path: Path) -> None:
+    """Сохраняет прогноз CNN как цветную тепловую NDVI-карту."""
+
+    pred_ndvi = np.squeeze(pred_ndvi).astype(np.float32)
+    pred_ndvi = np.clip(pred_ndvi, 0.0, 1.0)
+
+    cmap = plt.get_cmap("RdYlGn").copy()
+    cmap.set_bad(color="white")
+
+    plt.figure(figsize=(6, 4), dpi=150)
+    plt.imshow(pred_ndvi, cmap=cmap, vmin=0.0, vmax=1.0)
+    plt.colorbar(label="CNN NDVI")
+    plt.axis("off")
+    plt.tight_layout(pad=0.2)
+    plt.savefig(output_path, bbox_inches="tight", pad_inches=0.05)
+    plt.close()
 
 def _status_from_normalized_ndvi(value: float) -> str:
     # Значение здесь нормировано по изображению [0; 1], поэтому это приближенная оценка.
@@ -62,8 +83,7 @@ def predict_sample(
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    arr = np.clip(pred.numpy() * 255, 0, 255).astype(np.uint8)
-    Image.fromarray(arr).save(output_path)
+    _save_cnn_ndvi_heatmap(pred.numpy(), output_path)
 
     mean_value = float(pred.mean().item())
     result: Dict[str, float | str] = {

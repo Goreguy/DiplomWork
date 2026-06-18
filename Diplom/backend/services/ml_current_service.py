@@ -4,9 +4,11 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from PIL import Image
 from sentinelhub import BBox, CRS, DataCollection, MimeType, SentinelHubRequest, SHConfig
 
 from config import CLIENT_ID, CLIENT_SECRET
@@ -41,6 +43,20 @@ def _status_from_ndvi(value: float) -> str:
         return "Среднее состояние"
     return "Хорошее состояние"
 
+
+
+
+def _save_cnn_ndvi_heatmap(pred_ndvi: np.ndarray, valid_mask: np.ndarray, output_path: Path) -> None:
+    pred_ndvi = np.squeeze(pred_ndvi)
+    pred_ndvi = np.clip(pred_ndvi, 0, 1)
+
+    plt.imsave(
+        output_path,
+        pred_ndvi,
+        cmap="RdYlGn",
+        vmin=0,
+        vmax=1
+    )
 
 def _load_training_metrics() -> dict:
     metrics_path = MODEL_PATH.parent / "metrics.json"
@@ -224,8 +240,7 @@ def predict_current_ndvi(points):
 
     output_path = STATIC_DIR / "predicted_ndvi_current.png"
 
-    image_array = np.clip(pred * 255, 0, 255).astype(np.uint8)
-    Image.fromarray(image_array).save(output_path)
+    _save_cnn_ndvi_heatmap(pred, valid_mask, output_path)
 
     metrics = _load_training_metrics()
 

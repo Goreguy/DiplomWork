@@ -198,9 +198,37 @@ class AnalysisResultPage extends StatelessWidget {
 
                       const SizedBox(height: 12),
 
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.network(cnnImageUrl!, fit: BoxFit.cover),
+                      const Text(
+                        "Предсказанная CNN NDVI-карта",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 420),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.network(
+                              cnnImageUrl!,
+                              width: 420,
+                              fit: BoxFit.contain,
+                              errorBuilder: (context, error, stackTrace) {
+                                return const Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: Text(
+                                    "Не удалось загрузить CNN NDVI-карту",
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ],
