@@ -26,6 +26,17 @@ class _MainPageState extends State<MainPage> {
   String? vegetationStatus;
   String? rgbUrl;
 
+  // Результаты CNN-модуля машинного обучения
+  String? cnnImageUrl;
+  double? cnnMeanNdvi;
+  String? cnnStatus;
+  double? cnnMse;
+  double? cnnMae;
+  double? cnnR2;
+  String? cnnField;
+  String? cnnDatePrefix;
+  String? cnnError;
+
   List<LatLng> points = [];
   List<dynamic> searchResults = [];
 
@@ -207,6 +218,54 @@ class _MainPageState extends State<MainPage> {
     }
   }
 
+  // загрузка результата CNN-модуля
+  Future<void> loadCnnPrediction() async {
+    final url = Uri.parse('http://127.0.0.1:8000/ml/predict-current');
+
+    final body = {
+      "points": points.map((p) {
+        return {"lat": p.latitude, "lon": p.longitude};
+      }).toList(),
+    };
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(body),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        setState(() {
+          cnnImageUrl =
+              "${data["image_url"]}?t=${DateTime.now().millisecondsSinceEpoch}";
+          cnnMeanNdvi = (data["mean_predicted_ndvi"] as num?)?.toDouble();
+          cnnStatus = data["status"]?.toString();
+          cnnMse = (data["mse"] as num?)?.toDouble();
+          cnnMae = (data["mae"] as num?)?.toDouble();
+          cnnR2 = (data["r2"] as num?)?.toDouble();
+          cnnField = data["field"]?.toString();
+          cnnDatePrefix = data["date_prefix"]?.toString();
+          cnnError = null;
+        });
+      } else {
+        final data = jsonDecode(response.body);
+        setState(() {
+          cnnError =
+              data["detail"]?.toString() ?? "CNN-модуль временно недоступен";
+        });
+      }
+    } catch (e) {
+      setState(() {
+        cnnError = "Ошибка CNN-модуля: $e";
+      });
+
+      debugPrint("Ошибка CNN: $e");
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -292,6 +351,15 @@ class _MainPageState extends State<MainPage> {
       vegetationStatus = null;
       heatmapUrl = null;
       rgbUrl = null;
+      cnnImageUrl = null;
+      cnnMeanNdvi = null;
+      cnnStatus = null;
+      cnnMse = null;
+      cnnMae = null;
+      cnnR2 = null;
+      cnnField = null;
+      cnnDatePrefix = null;
+      cnnError = null;
       ndviHistory.clear();
     });
 
@@ -329,6 +397,7 @@ class _MainPageState extends State<MainPage> {
         await loadHistory();
         await loadHeatmap();
         await loadRgb();
+        await loadCnnPrediction();
 
         Navigator.push(
           context,
@@ -339,6 +408,15 @@ class _MainPageState extends State<MainPage> {
               history: ndviHistory,
               heatmapUrl: heatmapUrl,
               rgbUrl: rgbUrl,
+              cnnImageUrl: cnnImageUrl,
+              cnnMeanNdvi: cnnMeanNdvi,
+              cnnStatus: cnnStatus,
+              cnnMse: cnnMse,
+              cnnMae: cnnMae,
+              cnnR2: cnnR2,
+              cnnField: cnnField,
+              cnnDatePrefix: cnnDatePrefix,
+              cnnError: cnnError,
             ),
           ),
         );
